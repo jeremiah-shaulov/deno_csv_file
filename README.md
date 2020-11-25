@@ -1,5 +1,5 @@
 # deno_csv_file
-CSV file reader and writer (seekable, sync/async).
+CSV file reader and writer for Deno (seekable, sync/async).
 
 ## Example
 
@@ -43,4 +43,10 @@ console.log(`Record no. 2 at ${file_offset}:`, record);
 
 // 9. Done
 csv.close();
+```
+
+Run like this:
+
+```bash
+deno run --allow-read --allow-write test.ts
 ```
