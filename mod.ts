@@ -9,7 +9,7 @@ function assert(expr: unknown): asserts expr
 }
 
 /**	Decode bytes with given TextDecoder.
-	If the encoding is 'utf-8', and bytes has incomplete char at the end, it will be excluded from decoding.
+ *  If the encoding is 'utf-8', and bytes has incomplete char at the end, it will be excluded from decoding.
  **/
 function decode(bytes: Uint8Array, decoder: TextDecoder): string
 {	if (decoder.encoding == 'utf-8')
@@ -59,15 +59,21 @@ export class CsvFile
 	private n_record = 0; // Valid if index was enabled.
 	private index: number[] = []; // Record index. Zero-length means index disabled. Format: index[n_record] = file_offset.
 
-	/**	Header record. Usually it's set by readHeader(). You can modify it.
+	/**	Header record. Usually it's set by readHeader(). You can modify it, or set manually at any point.
 	 **/
 	public header: string[] = [];
 
-	/**	File is assumed to be opened in read and/or write mode, but not append.
-		File pointer is not required to be at the beginning.
-		Technically all the public fields, like delimiter, limitField, etc. can be modified at any time, and the object will continue reading/writing with the new values.
-
-		`endl` is used only for writing records. Reader understands any combination of \r and \n.
+	/** File is assumed to be opened in read and/or write mode, but not append.
+	 *  File pointer is not required to be at the beginning.
+	 *
+	 *  Technically all the public fields, like delimiter, limitField, etc. can be modified at any time, and the object will continue reading/writing with the new values.
+	 *
+	 *  * `delimiter` - 1 single-byte character. Default ','.
+	 *  * `enclosure` - 1 single-byte character. Default '"'.
+	 *  * `endl` - is used only for writing records. Reader understands any combination of \r and \n. Default '\n'.
+	 *  * `limitField` - length of each field will be limited.
+	 *  * `limitRecord` - length of the whole record will be limited.
+	 *  * `decoder` - will use this decoder for decoding bytes from file.
 	 **/
 	constructor
 	(	private file: Deno.File,
@@ -151,15 +157,18 @@ export class CsvFile
 	}
 
 	/**	Allows you to jump to specific record number.
-	 	Current record number can be found like this: `n = await seekRecord(0, Deno.SeekMode.Current)`.
-	 	Number of records can be found like this: `length = await seekRecord(0, Deno.SeekMode.End)`. This will also shift the file pointer to the end of file.
-
-		After the first call to this function, this object creates search index, and maintains it while you read or write further records.
-		If you are planning to call this function, it's reasonable to create the index immediately after opening the file by calling seekRecord(0).
-		The index is internal array of file offsets for records read or written so far.
-
-		Throws Error, if file pointer is currently in the middle of record, and Deno.SeekMode.Current is requested.
-		The file pointer can find himself in the middle of record only if you called seek().
+	 *
+	 *  Current record number can be found like this:
+	 *  	n = await seekRecord(0, Deno.SeekMode.Current)
+	 *  Number of records can be found like this:
+	 *  	length = await seekRecord(0, Deno.SeekMode.End) // This will also shift the file pointer to the end of file.
+	 *
+	 *  After the first call to this function, this object creates search index, and maintains it while you read or write further records.
+	 *  If you are planning to call this function, it's reasonable to create the index immediately after opening the file by calling seekRecord(0).
+	 *  The index is internal array of file offsets for records read or written so far.
+	 *
+	 *  Throws Error, if file pointer is currently in the middle of record, and Deno.SeekMode.Current is requested.
+	 *  The file pointer can find himself in the middle of record only if you called seek().
 	 **/
 	async seekRecord(n_record: number, whence=Deno.SeekMode.Start): Promise<number>
 	{	if (!this.index.length) // if index is not enabled
@@ -380,13 +389,13 @@ export class CsvFile
 		let enclosure_code = this.enclosure.charCodeAt(0);
 		let record: string[] = [];
 		let field = [];
-		let read_chars_record = 0;
+		let record_len = 0;
 		let c;
 		while (true)
 		{	c = await this.readByte();
 			while (c == enclosure_code)
 			{	while ((c = await this.readByte()) != EOF && c != enclosure_code)
-				{	if (field.length<this.limitField && ++read_chars_record<this.limitRecord)
+				{	if (field.length<this.limitField && ++record_len<this.limitRecord)
 					{	field[field.length] = c;
 					}
 				}
@@ -394,7 +403,7 @@ export class CsvFile
 				{	// assume: at '"'
 					c = await this.readByte(); // read next char
 					if (c == enclosure_code) // double '"'
-					{	if (field.length<this.limitField && ++read_chars_record<this.limitRecord)
+					{	if (field.length<this.limitField && ++record_len<this.limitRecord)
 						{	field[field.length] = c;
 						}
 					}
@@ -411,7 +420,7 @@ export class CsvFile
 				field.length = 0;
 			}
 			else
-			{	if (field.length<this.limitField && ++read_chars_record<this.limitRecord)
+			{	if (field.length<this.limitField && ++record_len<this.limitRecord)
 				{	field[field.length] = c;
 				}
 			}
@@ -431,13 +440,13 @@ export class CsvFile
 		let enclosure_code = this.enclosure.charCodeAt(0);
 		let record: string[] = [];
 		let field = [];
-		let read_chars_record = 0;
+		let record_len = 0;
 		let c;
 		while (true)
 		{	c = this.readByteSync();
 			while (c == enclosure_code)
 			{	while ((c = this.readByteSync()) != EOF && c != enclosure_code)
-				{	if (field.length<this.limitField && ++read_chars_record<this.limitRecord)
+				{	if (field.length<this.limitField && ++record_len<this.limitRecord)
 					{	field[field.length] = c;
 					}
 				}
@@ -445,7 +454,7 @@ export class CsvFile
 				{	// assume: at '"'
 					c = this.readByteSync(); // read next char
 					if (c == enclosure_code) // double '"'
-					{	if (field.length<this.limitField && ++read_chars_record<this.limitRecord)
+					{	if (field.length<this.limitField && ++record_len<this.limitRecord)
 						{	field[field.length] = c;
 						}
 					}
@@ -462,7 +471,7 @@ export class CsvFile
 				field.length = 0;
 			}
 			else
-			{	if (field.length<this.limitField && ++read_chars_record<this.limitRecord)
+			{	if (field.length<this.limitField && ++record_len<this.limitRecord)
 				{	field[field.length] = c;
 				}
 			}
@@ -478,7 +487,7 @@ export class CsvFile
 	}
 
 	/**	Read header record - usually the first line in file, that contains column titles.
-		Then you can readMap().
+	 *  Then you can readMap().
 	 **/
 	async readHeader(): Promise<string[]>
 	{	this.header = (await this.readRecord()) ?? [];

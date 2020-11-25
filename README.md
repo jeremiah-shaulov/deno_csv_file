@@ -1,6 +1,8 @@
 # deno_csv_file
 CSV file reader and writer for Deno (seekable, sync/async).
 
+[![deno doc](https://doc.deno.land/badge.svg)](https://doc.deno.land/https/deno.land/x/csv_file/mod.ts)
+
 ## Example
 
 ```typescript
