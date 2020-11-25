@@ -586,4 +586,28 @@ export class CsvFile
 		{	yield record;
 		}
 	}
+
+	maps(): CsvFileMapsIterator
+	{	return new CsvFileMapsIterator(this);
+	}
+}
+
+class CsvFileMapsIterator
+{	constructor
+	(	private csv: CsvFile
+	){}
+
+	async *[Symbol.asyncIterator](): AsyncGenerator<Map<string, string>>
+	{	let record;
+		while ((record = await this.csv.readMap()))
+		{	yield record;
+		}
+	}
+
+	*[Symbol.iterator](): Generator<Map<string, string>>
+	{	let record;
+		while ((record = this.csv.readMapSync()))
+		{	yield record;
+		}
+	}
 }
