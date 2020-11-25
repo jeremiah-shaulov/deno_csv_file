@@ -8,8 +8,8 @@ function assert(expr: unknown): asserts expr
 	}
 }
 
-/**	Decode bytes with given TextDecoder.
- *  If the encoding is 'utf-8', and bytes has incomplete char at the end, it will be excluded from decoding.
+/** Decode bytes with given TextDecoder.
+ * If the encoding is 'utf-8', and bytes has incomplete char at the end, it will be excluded from decoding.
  **/
 function decode(bytes: Uint8Array, decoder: TextDecoder): string
 {	if (decoder.encoding == 'utf-8')
@@ -49,7 +49,7 @@ function arraySearchBinary(needle: any, haystack: any[])
 	return -(from + 1); // must place before -(from + 1)
 }
 
-/**	Allows to read/write CSV records from/to file.
+/** Allows to read/write CSV records from/to file.
  **/
 export class CsvFile
 {	private buffer = new Uint8Array(BUFFER_LEN); // For buffered read. Only range between buffer_pos..buffer_end_pos is set.
@@ -59,21 +59,21 @@ export class CsvFile
 	private n_record = 0; // Valid if index was enabled.
 	private index: number[] = []; // Record index. Zero-length means index disabled. Format: index[n_record] = file_offset.
 
-	/**	Header record. Usually it's set by readHeader(). You can modify it, or set manually at any point.
+	/** Header record. Usually it's set by readHeader(). You can modify it, or set manually at any point.
 	 **/
 	public header: string[] = [];
 
 	/** File is assumed to be opened in read and/or write mode, but not append.
-	 *  File pointer is not required to be at the beginning.
+	 * File pointer is not required to be at the beginning.
 	 *
-	 *  Technically all the public fields, like delimiter, limitField, etc. can be modified at any time, and the object will continue reading/writing with the new values.
+	 * Technically all the public fields, like delimiter, limitField, etc. can be modified at any time, and the object will continue reading/writing with the new values.
 	 *
-	 *  * `delimiter` - 1 single-byte character. Default ','.
-	 *  * `enclosure` - 1 single-byte character. Default '"'.
-	 *  * `endl` - is used only for writing records. Reader understands any combination of \r and \n. Default '\n'.
-	 *  * `limitField` - length of each field will be limited.
-	 *  * `limitRecord` - length of the whole record will be limited.
-	 *  * `decoder` - will use this decoder for decoding bytes from file.
+	 * * `delimiter` - 1 single-byte character. Default ','.
+	 * * `enclosure` - 1 single-byte character. Default '"'.
+	 * * `endl` - is used only for writing records. Reader understands any combination of \r and \n. Default '\n'.
+	 * * `limitField` - length of each field will be limited.
+	 * * `limitRecord` - length of the whole record will be limited.
+	 * * `decoder` - will use this decoder for decoding bytes from file.
 	 **/
 	constructor
 	(	private file: Deno.File,
@@ -111,6 +111,8 @@ export class CsvFile
 		return this.buffer[this.buffer_pos++];
 	}
 
+	/** Call seek() on underlying file handle, with all the corrections needed according to read buffer.
+	 **/
 	async seek(offset: number, whence=Deno.SeekMode.Start): Promise<number>
 	{	let correction = this.wantSeek(offset, whence);
 		offset = correction>=0 ? 0 : offset+correction+1; // correct according to buffered bytes
@@ -156,19 +158,19 @@ export class CsvFile
 		}
 	}
 
-	/**	Allows you to jump to specific record number.
+	/** Allows you to jump to specific record number.
 	 *
-	 *  Current record number can be found like this:
-	 *  	n = await seekRecord(0, Deno.SeekMode.Current)
-	 *  Number of records can be found like this:
-	 *  	length = await seekRecord(0, Deno.SeekMode.End) // This will also shift the file pointer to the end of file.
+	 * Current record number can be found like this:
+	 * 	n = await seekRecord(0, Deno.SeekMode.Current)
+	 * Number of records can be found like this:
+	 * 	length = await seekRecord(0, Deno.SeekMode.End) // This will also shift the file pointer to the end of file.
 	 *
-	 *  After the first call to this function, this object creates search index, and maintains it while you read or write further records.
-	 *  If you are planning to call this function, it's reasonable to create the index immediately after opening the file by calling seekRecord(0).
-	 *  The index is internal array of file offsets for records read or written so far.
+	 * After the first call to this function, this object creates search index, and maintains it while you read or write further records.
+	 * If you are planning to call this function, it's reasonable to create the index immediately after opening the file by calling seekRecord(0).
+	 * The index is internal array of file offsets for records read or written so far.
 	 *
-	 *  Throws Error, if file pointer is currently in the middle of record, and Deno.SeekMode.Current is requested.
-	 *  The file pointer can find himself in the middle of record only if you called seek().
+	 * Throws Error, if file pointer is currently in the middle of record, and Deno.SeekMode.Current is requested.
+	 * The file pointer can find himself in the middle of record only if you called seek().
 	 **/
 	async seekRecord(n_record: number, whence=Deno.SeekMode.Start): Promise<number>
 	{	if (!this.index.length) // if index is not enabled
@@ -384,6 +386,8 @@ export class CsvFile
 		return true;
 	}
 
+	/** Read 1 record (array of strings). At end of file returns null.
+	 **/
 	async readRecord(): Promise<string[] | null>
 	{	let delimiter_code = this.delimiter.charCodeAt(0);
 		let enclosure_code = this.enclosure.charCodeAt(0);
@@ -486,8 +490,8 @@ export class CsvFile
 		return record;
 	}
 
-	/**	Read header record - usually the first line in file, that contains column titles.
-	 *  Then you can readMap().
+	/** Read header record - usually the first line in file, that contains column titles.
+	 * Then you can readMap().
 	 **/
 	async readHeader(): Promise<string[]>
 	{	this.header = (await this.readRecord()) ?? [];
@@ -511,6 +515,24 @@ export class CsvFile
 		return map;
 	}
 
+	/** Read 1 record as Map object.
+	 *
+	 * The map will have `this.header.length` items in the same order as in `this.header`.
+	 * If the current record is shorter, empty cells will be assumed at the end.
+	 * Extra cells will be ignored.
+	 *
+	 * You can set `this.header` manually.
+	 *
+	 * 	csv.header = ['One', 'Two', 'Three'];
+	 * 	let record = await csv.readMap();
+	 *
+	 * Or you can call `readHeader()` to store current record to `this.header`.
+	 *
+	 * 	csv.seekRecord(0);
+	 * 	csv.readHeader();
+	 * 	csv.seekRecord(100);
+	 *  let record = await csv.readMap();
+	 **/
 	async readMap(): Promise<Map<string, string> | null>
 	{	return this.recordToMap(await this.readRecord());
 	}
@@ -578,10 +600,46 @@ export class CsvFile
 		return n_bytes;
 	}
 
+	/** Close the underlying file handle. This must be the last operation on the object.
+	 *
+	 * Each opened file must be closed.
+	 **/
 	close()
 	{	this.file.close();
 	}
 
+	/** Unwrap the underlying file handle to use outside of this object. Don't use the object after this call.
+	 *
+	 * This drops buffer. If there were bytes buffered, will rewind the file pointer to the beginning of buffer.
+	 **/
+	async unwrap(): Promise<Deno.File>
+	{	let buffered = this.buffer_end_pos - this.buffer_pos;
+		if (buffered != 0)
+		{	await this.file.seek(-buffered, Deno.SeekMode.Current);
+			this.buffer_pos = this.buffer_end_pos; // drop buffer
+			this.file_offset -= buffered;
+		}
+		return this.file;
+	}
+
+	unwrapSync(): Deno.File
+	{	let buffered = this.buffer_end_pos - this.buffer_pos;
+		if (buffered != 0)
+		{	this.file.seekSync(-buffered, Deno.SeekMode.Current);
+			this.buffer_pos = this.buffer_end_pos; // drop buffer
+			this.file_offset -= buffered;
+		}
+		return this.file;
+	}
+
+	/**	Allows to iterate this CSV file from current position.
+	 *
+	 * 	for await (let record of csv)
+	 * 	{	if (record[0] == 'Clue')
+	 * 		{	break;
+	 * 		}
+	 * 	}
+	 **/
 	async *[Symbol.asyncIterator](): AsyncGenerator<string[]>
 	{	let record;
 		while ((record = await this.readRecord()))
@@ -589,6 +647,15 @@ export class CsvFile
 		}
 	}
 
+	/**	Allows to iterate this CSV file from current position.
+	 * This is synchronous iteration (uses file.readSync()).
+	 *
+	 * 	for (let record of csv)
+	 * 	{	if (record[0] == 'Clue')
+	 * 		{	break;
+	 * 		}
+	 * 	}
+	 **/
 	*[Symbol.iterator](): Generator<string[]>
 	{	let record;
 		while ((record = this.readRecordSync()))
@@ -596,6 +663,22 @@ export class CsvFile
 		}
 	}
 
+	/** Get maps synchronous/asynchronous iterator. Each record will be read as Map object.
+	 *
+	 * 	for await (let record of csv.maps())
+	 * 	{	if (record.get('What') == 'Clue')
+	 * 		{	break;
+	 * 		}
+	 * 	}
+	 *
+	 * 	// Synchronous version:
+	 *
+	 * 	for (let record of csv.maps())
+	 * 	{	if (record.get('What') == 'Clue')
+	 * 		{	break;
+	 * 		}
+	 * 	}
+	 **/
 	maps(): CsvFileMapsIterator
 	{	return new CsvFileMapsIterator(this);
 	}
