@@ -1,5 +1,7 @@
 const BUFFER_LEN = 8*1024;
 const EOF = 0;
+const CR = 13;
+const LF = 10;
 const ASSERTIONS_ENABLED = false;
 
 function assert(expr: unknown): asserts expr
@@ -70,7 +72,7 @@ export class CsvFile
 	 *
 	 * * `delimiter` - 1 single-byte character. Default ','.
 	 * * `enclosure` - 1 single-byte character. Default '"'.
-	 * * `endl` - is used only for writing records. Reader understands any combination of \r and \n. Default '\n'.
+	 * * `endl` - is used only for writing records. Reader understands any of \r, \n and \r\n. Default '\n'.
 	 * * `limitField` - length of each field will be limited.
 	 * * `limitRecord` - length of the whole record will be limited.
 	 * * `decoder` - will use this decoder for decoding bytes from file.
@@ -84,6 +86,16 @@ export class CsvFile
 		public limitRecord = 0x7FFFFFFF,
 		public decoder = new TextDecoder
 	){}
+
+	/** Get next byte from buffer. If the buffer is empty, EOF is returned, and need to get that byte using readByte().
+	 * Reading bytes like this avoids Promise awaiting in most cases.
+	 **/
+	private getByte()
+	{	if (this.buffer_pos >= this.buffer_end_pos) // if buffer is empty
+		{	return EOF;
+		}
+		return this.buffer[this.buffer_pos++];
+	}
 
 	private async readByte(): Promise<number>
 	{	if (this.buffer_pos >= this.buffer_end_pos) // if buffer is empty
@@ -307,24 +319,28 @@ export class CsvFile
 		let has_field = false;
 		let c;
 		while (true)
-		{	c = await this.readByte();
+		{	c = this.getByte() || await this.readByte();
 			while (c == enclosure_code)
-			{	while ((c = await this.readByte()) != EOF && c != enclosure_code)
+			{	while ((c = this.getByte() || await this.readByte()) != EOF && c != enclosure_code)
 				{	has_field = true;
 				}
 				if (c != EOF)
 				{	// assume: at '"'
-					c = await this.readByte(); // read next char
+					c = this.getByte() || await this.readByte(); // read next char
 					if (c == enclosure_code) // double '"'
 					{	has_field = true;
 					}
 				}
 			}
-			if (c==EOF || c==13 || c==10)
-			{	if (has_field || n_fields || c==EOF)
-				{	break;
+			if (c==EOF || c==LF)
+			{	break;
+			}
+			else if (c == CR)
+			{	c = this.getByte() || await this.readByte();
+				if (c != LF) // if CR not followed by LF
+				{	this.buffer_pos--; // unput
 				}
-				// assume: sequence of "\r" and/or "\n" chars, like "\n\n\n" or "\r\n"
+				break;
 			}
 			else if (c == delimiter_code)
 			{	n_fields++;
@@ -333,10 +349,10 @@ export class CsvFile
 			{	has_field = true;
 			}
 		}
-		n_fields++;
-		if (c==EOF && n_fields==1 && !has_field)
+		if (c==EOF && n_fields==0 && !has_field)
 		{	return false;
 		}
+		n_fields++;
 		if (this.index.length) // if index is enabled
 		{	this.index[++this.n_record] = this.file_offset - (this.buffer_end_pos - this.buffer_pos);
 		}
@@ -363,11 +379,15 @@ export class CsvFile
 					}
 				}
 			}
-			if (c==EOF || c==13 || c==10)
-			{	if (has_field || n_fields || c==EOF)
-				{	break;
+			if (c==EOF || c==LF)
+			{	break;
+			}
+			else if (c == CR)
+			{	c = this.readByteSync();
+				if (c != LF) // if CR not followed by LF
+				{	this.buffer_pos--; // unput
 				}
-				// assume: sequence of "\r" and/or "\n" chars, like "\n\n\n" or "\r\n"
+				break;
 			}
 			else if (c == delimiter_code)
 			{	n_fields++;
@@ -376,10 +396,10 @@ export class CsvFile
 			{	has_field = true;
 			}
 		}
-		n_fields++;
-		if (c==EOF && n_fields==1 && !has_field)
+		if (c==EOF && n_fields==0 && !has_field)
 		{	return false;
 		}
+		n_fields++;
 		if (this.index.length) // if index is enabled
 		{	this.index[++this.n_record] = this.file_offset - (this.buffer_end_pos - this.buffer_pos);
 		}
@@ -396,16 +416,16 @@ export class CsvFile
 		let record_len = 0;
 		let c;
 		while (true)
-		{	c = await this.readByte();
+		{	c = this.getByte() || await this.readByte();
 			while (c == enclosure_code)
-			{	while ((c = await this.readByte()) != EOF && c != enclosure_code)
+			{	while ((c = this.getByte() || await this.readByte()) != EOF && c != enclosure_code)
 				{	if (field.length<this.limitField && ++record_len<this.limitRecord)
 					{	field[field.length] = c;
 					}
 				}
 				if (c != EOF)
 				{	// assume: at '"'
-					c = await this.readByte(); // read next char
+					c = this.getByte() || await this.readByte(); // read next char
 					if (c == enclosure_code) // double '"'
 					{	if (field.length<this.limitField && ++record_len<this.limitRecord)
 						{	field[field.length] = c;
@@ -413,11 +433,15 @@ export class CsvFile
 					}
 				}
 			}
-			if (c==EOF || c==13 || c==10)
-			{	if (field.length || record.length || c==EOF)
-				{	break;
+			if (c==EOF || c==LF)
+			{	break;
+			}
+			else if (c == CR)
+			{	c = this.getByte() || await this.readByte();
+				if (c != LF) // if CR not followed by LF
+				{	this.buffer_pos--; // unput
 				}
-				// assume: sequence of "\r" and/or "\n" chars, like "\n\n\n" or "\r\n"
+				break;
 			}
 			else if (c == delimiter_code)
 			{	record[record.length] = decode(new Uint8Array(field), this.decoder);
@@ -429,8 +453,10 @@ export class CsvFile
 				}
 			}
 		}
-		record[record.length] = decode(new Uint8Array(field), this.decoder);
-		if (c==EOF && record.length==1 && !field.length)
+		if (field.length)
+		{	record[record.length] = decode(new Uint8Array(field), this.decoder);
+		}
+		if (c==EOF && record.length==0)
 		{	return null;
 		}
 		if (this.index.length) // if index is enabled
@@ -464,11 +490,15 @@ export class CsvFile
 					}
 				}
 			}
-			if (c==EOF || c==13 || c==10)
-			{	if (field.length || record.length || c==EOF)
-				{	break;
+			if (c==EOF || c==LF)
+			{	break;
+			}
+			else if (c == CR)
+			{	c = this.readByteSync();
+				if (c != LF) // if CR not followed by LF
+				{	this.buffer_pos--; // unput
 				}
-				// assume: sequence of "\r" and/or "\n" chars, like "\n\n\n" or "\r\n"
+				break;
 			}
 			else if (c == delimiter_code)
 			{	record[record.length] = decode(new Uint8Array(field), this.decoder);
@@ -480,8 +510,10 @@ export class CsvFile
 				}
 			}
 		}
-		record[record.length] = decode(new Uint8Array(field), this.decoder);
-		if (c==EOF && record.length==1 && !field.length)
+		if (field.length)
+		{	record[record.length] = decode(new Uint8Array(field), this.decoder);
+		}
+		if (c==EOF && record.length==0)
 		{	return null;
 		}
 		if (this.index.length) // if index is enabled

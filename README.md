@@ -9,7 +9,7 @@ CSV file reader and writer for Deno (seekable, sync/async).
 import {CsvFile} from "https://deno.land/x/csv_file/mod.ts";
 
 // 1. Create a new file "/tmp/example-1.csv"
-let csv = new CsvFile(await Deno.open('/tmp/example-1.csv', {read: true, write: true, create: true}));
+let csv = new CsvFile(await Deno.open('/tmp/example-1.csv', {read: true, write: true, create: true, truncate: true}));
 
 // 2. Write some records
 await csv.writeRecord(['Day', 'Month', 'Year']);
